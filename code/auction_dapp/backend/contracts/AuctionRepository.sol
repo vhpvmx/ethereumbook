@@ -1,4 +1,4 @@
-pragma solidity ^0.4.17;
+pragma solidity ^0.5.16;
 
 import "./DeedRepository.sol";
 
@@ -8,7 +8,7 @@ import "./DeedRepository.sol";
  * Moreover, it includes the basic functionalities of an auction house
  */
 contract AuctionRepository {
-    
+
     // Array with all auctions
     Auction[] public auctions;
 
@@ -20,7 +20,7 @@ contract AuctionRepository {
 
     // Bid struct to hold bidder and amount
     struct Bid {
-        address from;
+        address payable from;
         uint256 amount;
     }
 
@@ -32,7 +32,7 @@ contract AuctionRepository {
         string metadata;
         uint256 deedId;
         address deedRepositoryAddress;
-        address owner;
+        address payable owner;
         bool active;
         bool finalized;
     }
@@ -60,7 +60,7 @@ contract AuctionRepository {
     /**
     * @dev Disallow payments to this contract directly
     */
-    function() public{
+    function() external {
         revert();
     }
 
@@ -68,7 +68,7 @@ contract AuctionRepository {
     * @dev Gets the length of auctions
     * @return uint representing the auction count
     */
-    function getCount() public constant returns(uint) {
+    function getCount() public view returns(uint) {
         return auctions.length;
     }
 
@@ -76,7 +76,7 @@ contract AuctionRepository {
     * @dev Gets the bid counts of a given auction
     * @param _auctionId uint ID of the auction
     */
-    function getBidsCount(uint _auctionId) public constant returns(uint) {
+    function getBidsCount(uint _auctionId) public view returns(uint) {
         return auctionBids[_auctionId].length;
     }
 
@@ -84,7 +84,7 @@ contract AuctionRepository {
     * @dev Gets an array of owned auctions
     * @param _owner address of the auction owner
     */
-    function getAuctionsOf(address _owner) public constant returns(uint[]) {
+    function getAuctionsOf(address _owner) public view returns(uint[] memory) {
         uint[] memory ownedAuctions = auctionOwner[_owner];
         return ownedAuctions;
     }
@@ -94,14 +94,14 @@ contract AuctionRepository {
     * @param _auctionId uint of the auction owner
     * @return amount uint256, address of last bidder
     */
-    function getCurrentBid(uint _auctionId) public constant returns(uint256, address) {
+    function getCurrentBid(uint _auctionId) public view returns(uint256, address) {
         uint bidsLength = auctionBids[_auctionId].length;
         // if there are bids refund the last bid
         if( bidsLength > 0 ) {
             Bid memory lastBid = auctionBids[_auctionId][bidsLength - 1];
             return (lastBid.amount, lastBid.from);
         }
-        return (0, 0);
+        return (0, address(0));
     }
 
     /**
@@ -109,7 +109,7 @@ contract AuctionRepository {
     * @param _owner address of the owner
     * @return uint total number of auctions
     */
-    function getAuctionsCountOfOwner(address _owner) public constant returns(uint) {
+    function getAuctionsCountOfOwner(address _owner) public view returns(uint) {
         return auctionOwner[_owner].length;
     }
 
@@ -126,11 +126,11 @@ contract AuctionRepository {
     * @return bool whether the auction is active
     * @return bool whether the auction is finalized
     */
-    function getAuctionById(uint _auctionId) public constant returns(
-        string name,
+    function getAuctionById(uint _auctionId) public view returns(
+        string memory name,
         uint256 blockDeadline,
         uint256 startPrice,
-        string metadata,
+        string memory metadata,
         uint256 deedId,
         address deedRepositoryAddress,
         address owner,
@@ -139,28 +139,28 @@ contract AuctionRepository {
 
         Auction memory auc = auctions[_auctionId];
         return (
-            auc.name, 
-            auc.blockDeadline, 
-            auc.startPrice, 
-            auc.metadata, 
-            auc.deedId, 
-            auc.deedRepositoryAddress, 
-            auc.owner, 
-            auc.active, 
+            auc.name,
+            auc.blockDeadline,
+            auc.startPrice,
+            auc.metadata,
+            auc.deedId,
+            auc.deedRepositoryAddress,
+            auc.owner,
+            auc.active,
             auc.finalized);
     }
-    
+
     /**
     * @dev Creates an auction with the given informatin
     * @param _deedRepositoryAddress address of the DeedRepository contract
     * @param _deedId uint256 of the deed registered in DeedRepository
     * @param _auctionTitle string containing auction title
-    * @param _metadata string containing auction metadata 
+    * @param _metadata string containing auction metadata
     * @param _startPrice uint256 starting price of the auction
     * @param _blockDeadline uint is the timestamp in which the auction expires
     * @return bool whether the auction is created
     */
-    function createAuction(address _deedRepositoryAddress, uint256 _deedId, string _auctionTitle, string _metadata, uint256 _startPrice, uint _blockDeadline) public contractIsDeedOwner(_deedRepositoryAddress, _deedId) returns(bool) {
+    function createAuction(address _deedRepositoryAddress, uint256 _deedId, string memory _auctionTitle, string memory _metadata, uint256 _startPrice, uint _blockDeadline) public contractIsDeedOwner(_deedRepositoryAddress, _deedId) returns(bool) {
         uint auctionId = auctions.length;
         Auction memory newAuction;
         newAuction.name = _auctionTitle;
@@ -172,10 +172,10 @@ contract AuctionRepository {
         newAuction.owner = msg.sender;
         newAuction.active = true;
         newAuction.finalized = false;
-        
-        auctions.push(newAuction);        
+
+        auctions.push(newAuction);
         auctionOwner[msg.sender].push(auctionId);
-        
+
         emit AuctionCreated(msg.sender, auctionId);
         return true;
     }
@@ -224,7 +224,7 @@ contract AuctionRepository {
 
         // 1. if auction not ended just revert
         if( block.timestamp < myAuction.blockDeadline ) revert();
-        
+
         // if there are no bids cancel
         if(bidsLength == 0) {
             cancelAuction(_auctionId);
@@ -236,7 +236,7 @@ contract AuctionRepository {
                 revert();
             }
 
-            // approve and transfer from this contract to the bid winner 
+            // approve and transfer from this contract to the bid winner
             if(approveAndTransfer(address(this), lastBid.from, myAuction.deedRepositoryAddress, myAuction.deedId)){
                 auctions[_auctionId].active = false;
                 auctions[_auctionId].finalized = true;
@@ -271,17 +271,17 @@ contract AuctionRepository {
             tempAmount = lastBid.amount;
         }
 
-        // check if amound is greater than previous amount  
-        if( ethAmountSent < tempAmount ) revert(); 
+        // check if amound is greater than previous amount
+        if( ethAmountSent < tempAmount ) revert();
 
         // refund the last bidder
         if( bidsLength > 0 ) {
             if(!lastBid.from.send(lastBid.amount)) {
                 revert();
-            }  
+            }
         }
 
-        // insert bid 
+        // insert bid
         Bid memory newBid;
         newBid.from = msg.sender;
         newBid.amount = ethAmountSent;
